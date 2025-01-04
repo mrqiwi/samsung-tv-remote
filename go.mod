@@ -1,4 +1,4 @@
-module samsung-tv-remote
+module github.com/mrqiwi/samsung-tv-remote
 
 go 1.22.2
 

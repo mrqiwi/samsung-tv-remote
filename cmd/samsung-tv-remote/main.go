@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"samsung-tv-remote/internal/ws"
-	"samsung-tv-remote/internal/tv"
-	disc "samsung-tv-remote/internal/discover"
+	"github.com/mrqiwi/samsung-tv-remote/internal/ws"
+	"github.com/mrqiwi/samsung-tv-remote/internal/tv"
+	disc "github.com/mrqiwi/samsung-tv-remote/internal/discover"
 )
 
 func main() {
