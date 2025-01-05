@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mrqiwi/samsung-tv-remote/internal/ws"
-	"github.com/mrqiwi/samsung-tv-remote/internal/tv"
 	disc "github.com/mrqiwi/samsung-tv-remote/internal/discover"
+	"github.com/mrqiwi/samsung-tv-remote/internal/tv"
+	"github.com/mrqiwi/samsung-tv-remote/internal/ws"
 )
 
 func main() {
@@ -60,11 +60,12 @@ func executeCommand(port, discTimeout int, searchTarget string) {
 
 	fmt.Println("Attempting to connect to the TV. Please approve the connection request on your TV screen...")
 
-	tvClient := tv.NewTVClient(wsClient)
-	if err = tvClient.Authenticate(); err != nil {
-		fmt.Printf("Error authenticating: %v", err)
+	tvClient, err := tv.NewTVClient(wsClient)
+	if err != nil {
+		fmt.Printf("Error tv authenticating: %v", err)
 		return
 	}
+	defer tvClient.Close()
 
 	for {
 		cmd, err := chooseTVCommand(tvClient)
