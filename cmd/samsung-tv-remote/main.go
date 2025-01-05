@@ -1,18 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
-	"os"
-	"strconv"
-	"strings"
 
-	"github.com/spf13/cobra"
-
+	tea "github.com/charmbracelet/bubbletea"
 	disc "github.com/mrqiwi/samsung-tv-remote/internal/discover"
+	"github.com/mrqiwi/samsung-tv-remote/internal/tui"
 	"github.com/mrqiwi/samsung-tv-remote/internal/tv"
 	"github.com/mrqiwi/samsung-tv-remote/internal/ws"
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -40,95 +37,78 @@ func main() {
 }
 
 func executeCommand(port, discTimeout int, searchTarget string) {
-	fmt.Println("Searching for devices...")
+    fmt.Println("Searching for devices...")
 
-	discover := disc.NewDeviceDiscover(searchTarget, discTimeout)
-	device, err := chooseTV(discover)
-	if err != nil {
-		fmt.Print(err)
-		return
-	}
+    discover := disc.NewDeviceDiscover(searchTarget, discTimeout)
+    device, err := chooseTV(discover)
+    if err != nil {
+        fmt.Print(err)
+        return
+    }
 
-	tvURL := fmt.Sprintf("wss://%s:%d/api/v2/channels/samsung.remote.control", device.IPAddress, port)
+    tvURL := fmt.Sprintf("wss://%s:%d/api/v2/channels/samsung.remote.control", device.IPAddress, port)
 
-	wsClient, err := ws.NewWebSocketClient(tvURL)
-	if err != nil {
-		fmt.Printf("Error connecting to the TV: %v", err)
-		return
-	}
-	defer wsClient.Close()
+    wsClient, err := ws.NewWebSocketClient(tvURL)
+    if err != nil {
+        fmt.Printf("Error connecting to the TV: %v", err)
+        return
+    }
+    defer wsClient.Close()
 
-	fmt.Println("Attempting to connect to the TV. Please approve the connection request on your TV screen...")
+    fmt.Println("Attempting to connect to the TV. Please approve the connection request on your TV screen...")
 
-	tvClient, err := tv.NewTVClient(wsClient)
-	if err != nil {
-		fmt.Printf("Error tv authenticating: %v", err)
-		return
-	}
-	defer tvClient.Close()
+    tvClient, err := tv.NewTVClient(wsClient)
+    if err != nil {
+        fmt.Printf("Error tv authenticating: %v", err)
+        return
+    }
+    defer tvClient.Close()
 
-	for {
-		cmd, err := chooseTVCommand(tvClient)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+    for {
+        cmd, err := chooseTVCommand(tvClient)
+        if err != nil {
+            fmt.Println(err)
+			return
+        }
 
-		err = tvClient.ExecuteCommand(cmd)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
+        err = tvClient.ExecuteCommand(cmd)
+        if err != nil {
+            fmt.Println(err)
+			return
+        }
 
-		fmt.Println("Command sent successfully")
-	}
+        fmt.Println("Command sent successfully")
+    }
 }
 
 func chooseTV(discover *disc.DeviceDiscover) (disc.DeviceInfo, error) {
-	devices, err := discover.DiscoverSamsungTVs()
-	if err != nil || len(devices) == 0 {
-		return disc.DeviceInfo{}, fmt.Errorf("No TVs found on the network")
+    devices, err := discover.DiscoverSamsungTVs()
+    if err != nil || len(devices) == 0 {
+        return disc.DeviceInfo{}, fmt.Errorf("No TVs found on the network")
+    }
+
+    model := tui.NewDeviceListModel(devices)
+    p := tea.NewProgram(&model)
+
+    if _, err := p.Run(); err != nil {
+        return disc.DeviceInfo{}, fmt.Errorf("Error running program: %v", err)
+    }
+
+    if model.Esc() {
+    	return disc.DeviceInfo{}, fmt.Errorf("Exit running program")
 	}
 
-	fmt.Println("Discovered TVs:")
-	for i, device := range devices {
-		fmt.Printf("%d. %s (%s)\n", i+1, device.Name, device.IPAddress)
-	}
-
-	fmt.Printf("Enter the number of the TV you want to connect to: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return disc.DeviceInfo{}, fmt.Errorf("Error reading input: %v", err)
-	}
-
-	selection, err := strconv.Atoi(strings.TrimSpace(input))
-	if err != nil || selection < 1 || selection > len(devices) {
-		return disc.DeviceInfo{}, fmt.Errorf("Invalid selection")
-	}
-
-	return devices[selection-1], nil
+    return model.SelectedDevice(), nil
 }
 
 func chooseTVCommand(tvClient *tv.TVClient) (string, error) {
-	commands := tvClient.AvailableCommands()
+    commands := tvClient.AvailableCommands()
+    model := tui.NewCommandListModel(commands)
+    p := tea.NewProgram(&model)
 
-	fmt.Println("Available commands:")
-	for i, cmd := range commands {
-		fmt.Printf("%d. %s\n", i+1, cmd)
-	}
+    if _, err := p.Run(); err != nil {
+        return "", fmt.Errorf("Error running program: %v", err)
+    }
 
-	fmt.Printf("Enter the number of the command to execute: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return "", fmt.Errorf("Error reading input: %v", err)
-	}
-
-	selection, err := strconv.Atoi(strings.TrimSpace(input))
-	if err != nil || selection < 1 || selection > len(commands) {
-		return "", fmt.Errorf("Invalid selection")
-	}
-
-	return commands[selection-1], nil
+    return model.SelectedCommand(), nil
 }
