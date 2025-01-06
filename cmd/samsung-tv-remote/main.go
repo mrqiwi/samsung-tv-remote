@@ -37,78 +37,81 @@ func main() {
 }
 
 func executeCommand(port, discTimeout int, searchTarget string) {
-    fmt.Println("Searching for devices...")
+	fmt.Println("Searching for devices...")
 
-    discover := disc.NewDeviceDiscover(searchTarget, discTimeout)
-    device, err := chooseTV(discover)
-    if err != nil {
-        fmt.Print(err)
-        return
-    }
+	discover := disc.NewDeviceDiscover(searchTarget, discTimeout)
+	device, err := chooseTV(discover)
+	if err != nil {
+		fmt.Print(err)
+		return
+	}
 
-    tvURL := fmt.Sprintf("wss://%s:%d/api/v2/channels/samsung.remote.control", device.IPAddress, port)
+	tvURL := fmt.Sprintf("wss://%s:%d/api/v2/channels/samsung.remote.control", device.IPAddress, port)
 
-    wsClient, err := ws.NewWebSocketClient(tvURL)
-    if err != nil {
-        fmt.Printf("Error connecting to the TV: %v", err)
-        return
-    }
-    defer wsClient.Close()
+	wsClient, err := ws.NewWebSocketClient(tvURL)
+	if err != nil {
+		fmt.Printf("Error connecting to the TV: %v", err)
+		return
+	}
+	defer wsClient.Close()
 
-    fmt.Println("Attempting to connect to the TV. Please approve the connection request on your TV screen...")
+	fmt.Println("Attempting to connect to the TV. Please approve the connection request on your TV screen...")
 
-    tvClient, err := tv.NewTVClient(wsClient)
-    if err != nil {
-        fmt.Printf("Error tv authenticating: %v", err)
-        return
-    }
-    defer tvClient.Close()
+	tvClient, err := tv.NewTVClient(wsClient)
+	if err != nil {
+		fmt.Printf("Error tv authenticating: %v", err)
+		return
+	}
+	defer tvClient.Close()
 
-    for {
-        cmd, err := chooseTVCommand(tvClient)
-        if err != nil {
-            fmt.Println(err)
+	commands := tvClient.AvailableCommands()
+	model := tui.NewCommandListModel(commands)
+
+	for {
+		err = chooseTVCommand(&model)
+		if err != nil {
+			fmt.Println(err)
 			return
-        }
+		}
 
-        err = tvClient.ExecuteCommand(cmd)
-        if err != nil {
-            fmt.Println(err)
+		err := tvClient.ExecuteCommand(model.SelectedCommand())
+		if err != nil {
+			fmt.Println(err)
 			return
-        }
-
-        fmt.Println("Command sent successfully")
-    }
+		}
+	}
 }
 
 func chooseTV(discover *disc.DeviceDiscover) (disc.DeviceInfo, error) {
-    devices, err := discover.DiscoverSamsungTVs()
-    if err != nil || len(devices) == 0 {
-        return disc.DeviceInfo{}, fmt.Errorf("No TVs found on the network")
-    }
-
-    model := tui.NewDeviceListModel(devices)
-    p := tea.NewProgram(&model)
-
-    if _, err := p.Run(); err != nil {
-        return disc.DeviceInfo{}, fmt.Errorf("Error running program: %v", err)
-    }
-
-    if model.Esc() {
-    	return disc.DeviceInfo{}, fmt.Errorf("Exit running program")
+	devices, err := discover.DiscoverSamsungTVs()
+	if err != nil || len(devices) == 0 {
+		return disc.DeviceInfo{}, fmt.Errorf("No TVs found on the network")
 	}
 
-    return model.SelectedDevice(), nil
+	model := tui.NewDeviceListModel(devices)
+	p := tea.NewProgram(&model)
+
+	if _, err := p.Run(); err != nil {
+		return disc.DeviceInfo{}, fmt.Errorf("Error running program: %v", err)
+	}
+
+	if model.Esc() {
+		return disc.DeviceInfo{}, fmt.Errorf("Exit running program")
+	}
+
+	return model.SelectedDevice(), nil
 }
 
-func chooseTVCommand(tvClient *tv.TVClient) (string, error) {
-    commands := tvClient.AvailableCommands()
-    model := tui.NewCommandListModel(commands)
-    p := tea.NewProgram(&model)
+func chooseTVCommand(model *tui.CommandListModel) error {
+	p := tea.NewProgram(model)
 
-    if _, err := p.Run(); err != nil {
-        return "", fmt.Errorf("Error running program: %v", err)
-    }
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("Error running program: %v", err)
+	}
 
-    return model.SelectedCommand(), nil
+	if model.Esc() {
+		return fmt.Errorf("Exit running program")
+	}
+
+	return nil
 }
